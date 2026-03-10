@@ -25,12 +25,21 @@ async def get_fhir_client(
     """
     # Check if Epic Backend Services authentication is enabled
     if settings.epic_backend_services_enabled:
-        # Load private key
-        if not settings.epic_private_key_path:
-            raise ValueError("epic_private_key_path must be set when epic_backend_services_enabled is True")
+        # Load private key from environment or file
+        import os
 
-        with open(settings.epic_private_key_path, "r") as f:
-            private_key = f.read()
+        private_key = os.getenv("EPIC_PRIVATE_KEY")
+
+        if not private_key:
+            # Fall back to file path
+            if not settings.epic_private_key_path:
+                raise ValueError("Either EPIC_PRIVATE_KEY env var or epic_private_key_path must be set")
+
+            if not os.path.exists(settings.epic_private_key_path):
+                raise ValueError(f"Private key file not found: {settings.epic_private_key_path}")
+
+            with open(settings.epic_private_key_path, "r") as f:
+                private_key = f.read()
 
         # Create backend services auth
         backend_auth = BackendServicesAuth(
