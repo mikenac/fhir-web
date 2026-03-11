@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 # FHIR library imports
-from src.models.operational_data import CoverageInput, PractitionerInput  # ScheduleInput, SlotInput not yet in library
-from src.services.operational_service import OperationalService
+from fhir_client.models.operational_data import CoverageInput, PractitionerInput  # ScheduleInput, SlotInput not yet in library
+from fhir_client.services.operational_service import OperationalService
 
 from app.dependencies import get_operational_service
 from app.models.responses import PractitionerSummary, SearchResultsResponse

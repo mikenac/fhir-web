@@ -5,11 +5,11 @@ from typing import AsyncGenerator, Optional
 from fastapi import Depends, Query
 
 # FHIR library installed from ../fhir
-from src.client.fhir_client import FHIRClient
-from src.services.clinical_service import ClinicalService
-from src.services.operational_service import OperationalService
-from src.services.patient_service import PatientService
-from src.utils.backend_services import BackendServicesAuth
+from fhir_client.client.fhir_client import FHIRClient
+from fhir_client.services.clinical_service import ClinicalService
+from fhir_client.services.operational_service import OperationalService
+from fhir_client.services.patient_service import PatientService
+from fhir_client.utils.backend_services import BackendServicesAuth
 
 from app.config import Settings, get_settings
 

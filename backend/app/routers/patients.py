@@ -3,9 +3,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 # FHIR library imports
-from src.models.patient_demographics import PatientDemographicsInput, parse_patient_demographics
-from src.services.patient_service import PatientService
-from src.services.clinical_service import ClinicalService
+from fhir_client.models.patient_demographics import PatientDemographicsInput, parse_patient_demographics
+from fhir_client.services.patient_service import PatientService
+from fhir_client.services.clinical_service import ClinicalService
 
 from app.dependencies import get_patient_service, get_clinical_service
 from app.models.responses import PatientSummary, SearchResultsResponse

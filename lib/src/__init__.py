@@ -1,1 +1,0 @@
-"""FHIR Healthcare Data Application"""

@@ -11,7 +11,7 @@ dependencies = [
     "python-dotenv==1.0.1",
     "pyjwt==2.11.0",
     "cryptography==44.0.0",
-    "fhir-client",
+    "python-fhir-client",
 ]
 
 [build-system]
@@ -22,4 +22,4 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 [tool.uv.sources]
-fhir-client = { path = "../lib", editable = true }
+python-fhir-client = { git = "https://github.com/mikenac/python-fhir-client.git", branch = "main" }

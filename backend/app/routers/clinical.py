@@ -3,13 +3,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 # FHIR library imports
-from src.models.clinical_data import (
+from fhir_client.models.clinical_data import (
     EncounterInput,
     MedicationOrderInput,
     PatientOrderInput,
     ReferralOrderInput,
 )
-from src.services.clinical_service import ClinicalService
+from fhir_client.services.clinical_service import ClinicalService
 
 from app.dependencies import get_clinical_service
 from app.models.responses import EncounterSummary, OrderSummary, SearchResultsResponse
