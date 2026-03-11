@@ -10,6 +10,7 @@ setup(
     install_requires=[
         "httpx>=0.28.0",
         "pydantic>=2.0.0",
+        "fhir.resources>=7.0.0",
     ],
     python_requires=">=3.11",
 )
