@@ -30,8 +30,8 @@ gh repo create fhir-web --public --source=. --push
    - **Branch**: `main`
    - **Root Directory**: `backend`
    - **Runtime**: `Python 3`
-   - **Build Command**: `pip install ../lib && pip install .`
-   - **Start Command**: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Build Command**: `pip install uv`
+   - **Start Command**: `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
    - **Instance Type**: Free
 
 5. **Add Environment Variables** (click "Environment"):
