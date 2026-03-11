@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     )
 
     # CORS Settings
-    cors_origins: list[str] = Field(
+    cors_origins: list[str] | str = Field(
         default=["http://localhost:5173", "http://localhost:3000"],
-        description="Allowed CORS origins",
+        description="Allowed CORS origins (JSON array or comma-separated string)",
     )
 
     # OAuth2/SMART Settings (optional)
