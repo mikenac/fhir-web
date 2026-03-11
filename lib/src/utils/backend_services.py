@@ -8,11 +8,14 @@ References:
 - https://datatracker.ietf.org/doc/html/rfc7523
 """
 
+import logging
 import time
 import uuid
 from typing import Optional
 import httpx
 import jwt
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_private_key(private_key: str) -> str:
@@ -118,6 +121,10 @@ class BackendServicesAuth:
             "iat": now,  # Issued at
         }
 
+        logger.info(f"Creating JWT assertion with headers: {headers}")
+        logger.info(f"JWT claims: iss={claims['iss']}, sub={claims['sub']}, aud={claims['aud']}")
+        logger.info(f"JWT timing: iat={claims['iat']}, exp={claims['exp']}")
+
         # Sign JWT with private key
         token = jwt.encode(
             claims,
@@ -126,6 +133,7 @@ class BackendServicesAuth:
             headers=headers,
         )
 
+        logger.info(f"JWT token created (first 50 chars): {token[:50]}...")
         return token
 
     async def get_access_token(self, force_refresh: bool = False) -> str:
@@ -147,19 +155,35 @@ class BackendServicesAuth:
         assertion = self.create_jwt_assertion()
 
         # Request access token
+        request_data = {
+            "grant_type": "client_credentials",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": assertion,
+            "scope": " ".join(self.scopes),
+        }
+
+        logger.info(f"Requesting access token from: {self.token_url}")
+        logger.info(f"Token request scopes: {' '.join(self.scopes)}")
+
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                    "client_assertion": assertion,
-                    "scope": " ".join(self.scopes),
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            response.raise_for_status()
-            token_data = response.json()
+            try:
+                response = await client.post(
+                    self.token_url,
+                    data=request_data,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                logger.info(f"Token endpoint response status: {response.status_code}")
+
+                if response.status_code != 200:
+                    logger.error(f"Token endpoint error response: {response.text}")
+
+                response.raise_for_status()
+                token_data = response.json()
+                logger.info("Successfully obtained access token")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error during token request: {e}")
+                logger.error(f"Response body: {e.response.text}")
+                raise
 
         self.access_token = token_data["access_token"]
 
