@@ -26,7 +26,7 @@ class PatientDemographicsInput(BaseModel):
     suffix: Optional[str] = None
 
     # DOB
-    birth_date: date
+    birth_date: Optional[date] = None
 
     # MRN
     mrn: str
@@ -182,12 +182,11 @@ def parse_patient_demographics(patient: Patient) -> PatientDemographicsInput:
         country = str(addr.country) if addr.country else None
 
     # birthDate is a date object in fhir.resources 8.x; handle older string form defensively
+    birth_date = None
     if isinstance(patient.birthDate, date):
         birth_date = patient.birthDate
     elif patient.birthDate is not None:
         birth_date = date.fromisoformat(str(patient.birthDate))
-    else:
-        raise ValueError("Patient birthDate is required")
 
     return PatientDemographicsInput(
         family_name=family_name,
