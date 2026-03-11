@@ -32,60 +32,95 @@ apiClient.interceptors.response.use(
   }
 );
 
+/**
+ * Helper function to add server parameter to request config
+ * @param {string|null} server - The FHIR server to use (smart, hapi, epic)
+ * @param {object} config - Existing request config
+ * @returns {object} Updated config with server parameter
+ */
+function addServerParam(server, config = {}) {
+  if (!server) return config;
+
+  return {
+    ...config,
+    params: {
+      ...config.params,
+      server,
+    },
+  };
+}
+
 // Patient API
 export const patientAPI = {
-  create: (demographics) => apiClient.post('/api/patients/', demographics),
-  get: (patientId) => apiClient.get(`/api/patients/${patientId}`),
-  getByMRN: (mrn, mrnSystem = 'http://hospital.example.org/mrn') =>
-    apiClient.get(`/api/patients/mrn/${mrn}`, { params: { mrn_system: mrnSystem } }),
-  search: (familyName, givenName) =>
-    apiClient.get('/api/patients/', { params: { family_name: familyName, given_name: givenName } }),
-  update: (patientId, demographics) => apiClient.put(`/api/patients/${patientId}`, demographics),
+  create: (demographics, server = null) =>
+    apiClient.post('/api/patients/', demographics, addServerParam(server)),
+  get: (patientId, server = null) =>
+    apiClient.get(`/api/patients/${patientId}`, addServerParam(server)),
+  getByMRN: (mrn, mrnSystem = 'http://hospital.example.org/mrn', server = null) =>
+    apiClient.get(`/api/patients/mrn/${mrn}`, addServerParam(server, { params: { mrn_system: mrnSystem } })),
+  search: (familyName, givenName, server = null) =>
+    apiClient.get('/api/patients/', addServerParam(server, { params: { family_name: familyName, given_name: givenName } })),
+  update: (patientId, demographics, server = null) =>
+    apiClient.put(`/api/patients/${patientId}`, demographics, addServerParam(server)),
 };
 
 // Clinical API
 export const clinicalAPI = {
   // Encounters
-  createEncounter: (encounter) => apiClient.post('/api/clinical/encounters', encounter),
-  getEncounter: (encounterId) => apiClient.get(`/api/clinical/encounters/${encounterId}`),
-  getPatientEncounters: (patientId) =>
-    apiClient.get(`/api/clinical/patients/${patientId}/encounters`),
+  createEncounter: (encounter, server = null) =>
+    apiClient.post('/api/clinical/encounters', encounter, addServerParam(server)),
+  getEncounter: (encounterId, server = null) =>
+    apiClient.get(`/api/clinical/encounters/${encounterId}`, addServerParam(server)),
+  getPatientEncounters: (patientId, server = null) =>
+    apiClient.get(`/api/clinical/patients/${patientId}/encounters`, addServerParam(server)),
 
   // Orders
-  createOrder: (order) => apiClient.post('/api/clinical/orders', order),
-  getPatientOrders: (patientId) => apiClient.get(`/api/clinical/patients/${patientId}/orders`),
+  createOrder: (order, server = null) =>
+    apiClient.post('/api/clinical/orders', order, addServerParam(server)),
+  getPatientOrders: (patientId, server = null) =>
+    apiClient.get(`/api/clinical/patients/${patientId}/orders`, addServerParam(server)),
 
   // Medications
-  createMedication: (medication) => apiClient.post('/api/clinical/medications', medication),
-  getPatientMedications: (patientId) =>
-    apiClient.get(`/api/clinical/patients/${patientId}/medications`),
+  createMedication: (medication, server = null) =>
+    apiClient.post('/api/clinical/medications', medication, addServerParam(server)),
+  getPatientMedications: (patientId, server = null) =>
+    apiClient.get(`/api/clinical/patients/${patientId}/medications`, addServerParam(server)),
 
   // Referrals
-  createReferral: (referral) => apiClient.post('/api/clinical/referrals', referral),
-  getPatientReferrals: (patientId) =>
-    apiClient.get(`/api/clinical/patients/${patientId}/referrals`),
+  createReferral: (referral, server = null) =>
+    apiClient.post('/api/clinical/referrals', referral, addServerParam(server)),
+  getPatientReferrals: (patientId, server = null) =>
+    apiClient.get(`/api/clinical/patients/${patientId}/referrals`, addServerParam(server)),
 };
 
 // Operational API
 export const operationalAPI = {
+  // Server configuration
+  getAvailableServers: () => apiClient.get('/api/operational/servers'),
+
   // Practitioners
-  createPractitioner: (practitioner) =>
-    apiClient.post('/api/operational/practitioners', practitioner),
-  getPractitioner: (practitionerId) =>
-    apiClient.get(`/api/operational/practitioners/${practitionerId}`),
-  getPractitionerByNPI: (npi) => apiClient.get(`/api/operational/practitioners/npi/${npi}`),
+  createPractitioner: (practitioner, server = null) =>
+    apiClient.post('/api/operational/practitioners', practitioner, addServerParam(server)),
+  getPractitioner: (practitionerId, server = null) =>
+    apiClient.get(`/api/operational/practitioners/${practitionerId}`, addServerParam(server)),
+  getPractitionerByNPI: (npi, server = null) =>
+    apiClient.get(`/api/operational/practitioners/npi/${npi}`, addServerParam(server)),
 
   // Coverage
-  createCoverage: (coverage) => apiClient.post('/api/operational/coverage', coverage),
-  getPatientCoverage: (patientId) =>
-    apiClient.get(`/api/operational/patients/${patientId}/coverage`),
+  createCoverage: (coverage, server = null) =>
+    apiClient.post('/api/operational/coverage', coverage, addServerParam(server)),
+  getPatientCoverage: (patientId, server = null) =>
+    apiClient.get(`/api/operational/patients/${patientId}/coverage`, addServerParam(server)),
 
   // Scheduling
-  createSchedule: (schedule) => apiClient.post('/api/operational/schedules', schedule),
-  getPractitionerSchedules: (practitionerId) =>
-    apiClient.get(`/api/operational/practitioners/${practitionerId}/schedules`),
-  createSlot: (slot) => apiClient.post('/api/operational/slots', slot),
-  getScheduleSlots: (scheduleId) => apiClient.get(`/api/operational/schedules/${scheduleId}/slots`),
+  createSchedule: (schedule, server = null) =>
+    apiClient.post('/api/operational/schedules', schedule, addServerParam(server)),
+  getPractitionerSchedules: (practitionerId, server = null) =>
+    apiClient.get(`/api/operational/practitioners/${practitionerId}/schedules`, addServerParam(server)),
+  createSlot: (slot, server = null) =>
+    apiClient.post('/api/operational/slots', slot, addServerParam(server)),
+  getScheduleSlots: (scheduleId, server = null) =>
+    apiClient.get(`/api/operational/schedules/${scheduleId}/slots`, addServerParam(server)),
 };
 
 // Health check

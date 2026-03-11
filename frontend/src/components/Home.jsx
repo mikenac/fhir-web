@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { patientAPI, healthAPI } from '../api/client';
+import { useFHIRServer } from '../contexts/FHIRServerContext';
 
 function Home() {
   const navigate = useNavigate();
+  const { selectedServer, serverConfig } = useFHIRServer();
   const [searchType, setSearchType] = useState('name');
   const [searchParams, setSearchParams] = useState({
     familyName: '',
@@ -23,16 +25,16 @@ function Home() {
   });
 
   const { data: searchResults, isLoading, error } = useQuery({
-    queryKey: ['patientSearch', activeSearch],
+    queryKey: ['patientSearch', activeSearch, selectedServer],
     queryFn: async () => {
       if (activeSearch.type === 'name') {
-        const response = await patientAPI.search(activeSearch.familyName, activeSearch.givenName);
+        const response = await patientAPI.search(activeSearch.familyName, activeSearch.givenName, selectedServer);
         return response.data;
       } else if (activeSearch.type === 'id') {
-        const response = await patientAPI.get(activeSearch.patientId);
+        const response = await patientAPI.get(activeSearch.patientId, selectedServer);
         return { total: 1, results: [response.data] };
       } else if (activeSearch.type === 'mrn') {
-        const response = await patientAPI.getByMRN(activeSearch.mrn);
+        const response = await patientAPI.getByMRN(activeSearch.mrn, undefined, selectedServer);
         return { total: 1, results: [response.data] };
       }
     },
@@ -70,14 +72,20 @@ function Home() {
       <div className="hero">
         <h1>Find Patients</h1>
         <p>Search for patients by name, ID, or medical record number</p>
-        {healthData && (
+        <div className="status-row">
+          {healthData && (
+            <p className="status-badge">
+              Backend: <span className="status-healthy">{healthData.status}</span>
+            </p>
+          )}
           <p className="status-badge">
-            Server: <span className="status-healthy">{healthData.status}</span>
+            FHIR Server: <span className="server-badge">{serverConfig.icon} {serverConfig.name}</span>
           </p>
-        )}
+        </div>
       </div>
 
-      <div className="search-container">
+      <div className="layout-split">
+        <div className="search-panel">
         <div className="search-type-selector">
           <button
             className={`search-type-btn ${searchType === 'name' ? 'active' : ''}`}
@@ -173,17 +181,18 @@ function Home() {
             {isLoading ? 'Searching...' : 'Search Patients'}
           </button>
         </form>
-      </div>
-
-      {error && (
-        <div className="error-box">
-          <h3>Error</h3>
-          <p>{error.message}</p>
         </div>
-      )}
 
-      {searchResults && (
-        <div className="search-results">
+        <div className="results-panel">
+          {error && (
+            <div className="error-box">
+              <h3>Error</h3>
+              <p>{error.message}</p>
+            </div>
+          )}
+
+          {searchResults && (
+            <div className="search-results">
           <h3>
             {searchResults.total === 0 ? 'No Patients Found' : `Found ${searchResults.total} Patient${searchResults.total !== 1 ? 's' : ''}`}
           </h3>
@@ -225,7 +234,21 @@ function Home() {
             </div>
           )}
         </div>
-      )}
+          )}
+
+          {!searchResults && !error && !isLoading && (
+            <div className="empty-state">
+              <p>Enter search criteria and click "Search Patients" to find patients in {serverConfig.name}</p>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="loading-state">
+              <p>Searching {serverConfig.name}...</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

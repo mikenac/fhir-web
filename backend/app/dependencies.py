@@ -1,8 +1,8 @@
 """FastAPI dependencies for dependency injection."""
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
-from fastapi import Depends
+from fastapi import Depends, Query
 
 # FHIR library installed from ../fhir
 from src.client.fhir_client import FHIRClient
@@ -14,17 +14,51 @@ from src.utils.backend_services import BackendServicesAuth
 from app.config import Settings, get_settings
 
 
+# Server configuration mapping
+SERVER_CONFIGS = {
+    "smart": {
+        "base_url": "https://launch.smarthealthit.org/v/r4/fhir",
+        "requires_auth": False,
+    },
+    "hapi": {
+        "base_url": "https://hapi.fhir.org/baseR4",
+        "requires_auth": False,
+    },
+    "epic": {
+        "base_url": "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/",
+        "requires_auth": True,
+    },
+}
+
+
 async def get_fhir_client(
+    server: Optional[str] = Query(None, description="FHIR server to use (smart, hapi, epic)"),
     settings: Settings = Depends(get_settings),
 ) -> AsyncGenerator[FHIRClient, None]:
     """
     Dependency that provides a FHIR client instance.
 
     The client is created with a context manager to ensure proper cleanup.
-    Supports Epic Backend Services authentication if enabled.
+    Supports dynamic server selection and Epic Backend Services authentication.
+
+    Args:
+        server: Optional server identifier (smart, hapi, epic). If not provided,
+                uses settings from environment variables.
+        settings: Application settings from environment.
     """
-    # Check if Epic Backend Services authentication is enabled
-    if settings.epic_backend_services_enabled:
+    # Determine server configuration
+    if server and server in SERVER_CONFIGS:
+        # Use specified server
+        server_config = SERVER_CONFIGS[server]
+        base_url = server_config["base_url"]
+        requires_auth = server_config["requires_auth"]
+    else:
+        # Fall back to environment configuration
+        base_url = settings.fhir_base_url
+        requires_auth = settings.epic_backend_services_enabled
+
+    # Check if Epic Backend Services authentication is needed
+    if requires_auth or (server == "epic"):
         # Load private key from environment or file
         import os
 
@@ -56,7 +90,7 @@ async def get_fhir_client(
 
         # Create client with access token
         async with FHIRClient(
-            base_url=settings.fhir_base_url,
+            base_url=base_url,
             auth_token=access_token,
             timeout=settings.fhir_timeout,
         ) as client:
@@ -64,8 +98,8 @@ async def get_fhir_client(
     else:
         # Use simple auth token or no auth
         async with FHIRClient(
-            base_url=settings.fhir_base_url,
-            auth_token=settings.fhir_auth_token,
+            base_url=base_url,
+            auth_token=settings.fhir_auth_token if not server else None,
             timeout=settings.fhir_timeout,
         ) as client:
             yield client

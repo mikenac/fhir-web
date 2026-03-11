@@ -1,6 +1,7 @@
 """Operational data API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 # FHIR library imports
 from src.models.operational_data import CoverageInput, PractitionerInput  # ScheduleInput, SlotInput not yet in library
@@ -10,6 +11,51 @@ from app.dependencies import get_operational_service
 from app.models.responses import PractitionerSummary, SearchResultsResponse
 
 router = APIRouter()
+
+
+# Server configuration models
+class FHIRServerInfo(BaseModel):
+    """Information about a FHIR server option."""
+    id: str
+    name: str
+    description: str
+    base_url: str
+    requires_auth: bool
+
+
+class AvailableServersResponse(BaseModel):
+    """Response containing available FHIR servers."""
+    servers: list[FHIRServerInfo]
+
+
+# Server configuration endpoints
+@router.get("/servers", response_model=AvailableServersResponse)
+async def get_available_servers() -> AvailableServersResponse:
+    """Get list of available FHIR servers."""
+    servers = [
+        FHIRServerInfo(
+            id="smart",
+            name="SMART Health IT",
+            description="Public test server for healthcare app development",
+            base_url="https://launch.smarthealthit.org/v/r4/fhir",
+            requires_auth=False,
+        ),
+        FHIRServerInfo(
+            id="hapi",
+            name="HAPI FHIR",
+            description="Open source FHIR test server with large dataset",
+            base_url="https://hapi.fhir.org/baseR4",
+            requires_auth=False,
+        ),
+        FHIRServerInfo(
+            id="epic",
+            name="Epic Sandbox",
+            description="Epic FHIR sandbox (requires authentication)",
+            base_url="https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/",
+            requires_auth=True,
+        ),
+    ]
+    return AvailableServersResponse(servers=servers)
 
 
 def practitioner_to_summary(practitioner) -> PractitionerSummary:

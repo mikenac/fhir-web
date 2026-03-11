@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
 import PatientDetail from './components/PatientDetail';
 import Home from './components/Home';
+import ServerSelector from './components/ServerSelector';
+import { FHIRServerProvider } from './contexts/FHIRServerContext';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,26 +17,29 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <div className="app">
-          <nav className="navbar">
-            <div className="nav-brand">
-              <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <h1>FHIR Patient Finder</h1>
-              </Link>
-            </div>
-          </nav>
+    <FHIRServerProvider>
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <div className="app">
+            <nav className="navbar">
+              <div className="nav-brand">
+                <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <h1>FHIR Patient Finder</h1>
+                </Link>
+              </div>
+              <ServerSelector />
+            </nav>
 
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/patients/:patientId" element={<PatientDetail />} />
-            </Routes>
-          </main>
-        </div>
-      </Router>
-    </QueryClientProvider>
+            <main className="main-content">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/patients/:patientId" element={<PatientDetail />} />
+              </Routes>
+            </main>
+          </div>
+        </Router>
+      </QueryClientProvider>
+    </FHIRServerProvider>
   );
 }
 
