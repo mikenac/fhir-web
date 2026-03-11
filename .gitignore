@@ -54,3 +54,5 @@ Thumbs.db
 keys/
 *.pem
 *.jwk
+uv.lock
+uv.lock
