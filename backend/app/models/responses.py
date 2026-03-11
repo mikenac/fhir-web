@@ -1,6 +1,7 @@
 """API response models."""
 
 from datetime import date, datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -20,7 +21,7 @@ class PatientSummary(BaseModel):
     family_name: str
     given_names: list[str]
     full_name: str
-    birth_date: date
+    birth_date: Optional[date] = None
     mrn: str
     gender: str | None = None
     phone: str | None = None

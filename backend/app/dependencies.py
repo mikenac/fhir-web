@@ -53,9 +53,10 @@ async def get_fhir_client(
         base_url = server_config["base_url"]
         requires_auth = server_config["requires_auth"]
     else:
-        # Fall back to environment configuration
-        base_url = settings.fhir_base_url
-        requires_auth = settings.epic_backend_services_enabled
+        # Default to SMART Health IT when no server is specified
+        server_config = SERVER_CONFIGS["smart"]
+        base_url = server_config["base_url"]
+        requires_auth = server_config["requires_auth"]
 
     # Check if Epic Backend Services authentication is needed
     if requires_auth or (server == "epic"):
