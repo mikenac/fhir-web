@@ -15,6 +15,52 @@ import httpx
 import jwt
 
 
+def normalize_private_key(private_key: str) -> str:
+    """
+    Normalize a PEM private key by ensuring proper line breaks.
+
+    This fixes keys that have been copy/pasted into environment variables
+    where newlines may have been lost.
+
+    Args:
+        private_key: PEM-formatted private key (possibly without proper newlines)
+
+    Returns:
+        Properly formatted PEM key with correct line breaks
+    """
+    # Remove any existing whitespace/newlines
+    key = private_key.strip().replace('\n', '').replace('\r', '')
+
+    # If key doesn't have the header, it's invalid
+    if '-----BEGIN PRIVATE KEY-----' not in key and '-----BEGIN RSA PRIVATE KEY-----' not in key:
+        raise ValueError("Invalid private key format: missing BEGIN header")
+
+    # Extract the header, body, and footer
+    if '-----BEGIN PRIVATE KEY-----' in key:
+        header = '-----BEGIN PRIVATE KEY-----'
+        footer = '-----END PRIVATE KEY-----'
+    else:
+        header = '-----BEGIN RSA PRIVATE KEY-----'
+        footer = '-----END RSA PRIVATE KEY-----'
+
+    # Extract the key content between header and footer
+    start = key.find(header) + len(header)
+    end = key.find(footer)
+
+    if end == -1:
+        raise ValueError("Invalid private key format: missing END footer")
+
+    key_content = key[start:end]
+
+    # Rebuild the key with proper line breaks (64 chars per line is PEM standard)
+    lines = [header]
+    for i in range(0, len(key_content), 64):
+        lines.append(key_content[i:i+64])
+    lines.append(footer)
+
+    return '\n'.join(lines)
+
+
 class BackendServicesAuth:
     """SMART Backend Services authentication using JWT"""
 
@@ -40,7 +86,8 @@ class BackendServicesAuth:
         """
         self.token_url = token_url
         self.client_id = client_id
-        self.private_key = private_key
+        # Normalize the private key to handle environment variable formatting issues
+        self.private_key = normalize_private_key(private_key)
         self.key_id = key_id
         self.scopes = scopes or ["system/*.read"]
         self.algorithm = algorithm
