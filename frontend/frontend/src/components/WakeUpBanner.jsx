@@ -1,34 +1,49 @@
-import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { healthAPI } from '../api/client';
 
 export default function WakeUpBanner() {
   const [showBanner, setShowBanner] = useState(false);
+  const [backendUp, setBackendUp] = useState(false);
 
-  const { isSuccess } = useQuery({
-    queryKey: ['backend-wake-up'],
-    queryFn: () => healthAPI.check(),
-    retry: 100,
-    retryDelay: 3000,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-
-  // Only show the banner if the backend hasn't responded within 2 seconds.
-  // This prevents a flash on fast connections where the health check succeeds immediately.
   useEffect(() => {
-    if (isSuccess) return;
-    const timer = setTimeout(() => setShowBanner(true), 2000);
-    return () => clearTimeout(timer);
-  }, [isSuccess]);
+    let graceTimer;
+    let pollTimer;
+    let cancelled = false;
 
-  if (isSuccess || !showBanner) return null;
+    const checkHealth = async () => {
+      try {
+        await healthAPI.check();
+        if (!cancelled) setBackendUp(true);
+      } catch {
+        // still down
+      }
+    };
+
+    // Initial check
+    checkHealth();
+
+    // Show banner only after 2s grace period
+    graceTimer = setTimeout(() => {
+      if (!cancelled) setShowBanner(true);
+    }, 2000);
+
+    // Poll every 3s
+    pollTimer = setInterval(checkHealth, 3000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(graceTimer);
+      clearInterval(pollTimer);
+    };
+  }, []);
+
+  if (backendUp || !showBanner) return null;
 
   return (
     <div className="wakeup-banner">
       <div className="wakeup-content">
         <span className="wakeup-spinner" />
-        <span>Backend is waking up, this may take up to 30 seconds...</span>
+        <span>Backend is waking up, this may take a few minutes...</span>
       </div>
     </div>
   );
