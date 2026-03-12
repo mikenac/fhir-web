@@ -1,3 +1,40 @@
+/* Wake-Up Banner */
+.wakeup-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  background: var(--primary-color, #2563eb);
+  color: white;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+}
+
+.wakeup-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.wakeup-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: wakeup-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes wakeup-spin {
+  to { transform: rotate(360deg); }
+}
+
 :root {
   --primary-color: #2563eb;
   --primary-hover: #1d4ed8;
@@ -411,12 +448,24 @@ body {
   text-decoration: underline;
 }
 
+/* Two-column layout for patient details */
+.patient-detail-grid {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.patient-info-column {
+  position: sticky;
+  top: 2rem;
+}
+
 .patient-info-card {
   background: var(--surface);
   border-radius: 8px;
   padding: 2rem;
   box-shadow: var(--shadow);
-  margin-bottom: 2rem;
 }
 
 .patient-info-card h3 {
@@ -426,7 +475,7 @@ body {
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
@@ -447,6 +496,31 @@ body {
 .info-item span {
   color: var(--text-primary);
   font-size: 1rem;
+}
+
+/* Clinical data column - scrollable */
+.clinical-data-column {
+  max-height: calc(100vh - 12rem);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.clinical-data-column::-webkit-scrollbar {
+  width: 8px;
+}
+
+.clinical-data-column::-webkit-scrollbar-track {
+  background: var(--background);
+  border-radius: 4px;
+}
+
+.clinical-data-column::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.clinical-data-column::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary-color);
 }
 
 /* Clinical Data */
@@ -544,6 +618,22 @@ body {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .patient-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-info-column {
+    position: relative;
+    top: 0;
+  }
+
+  .clinical-data-column {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
 @media (max-width: 768px) {
   .navbar {
     flex-direction: column;

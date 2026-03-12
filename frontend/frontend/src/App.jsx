@@ -4,6 +4,7 @@ import './App.css';
 import PatientDetail from './components/PatientDetail';
 import Home from './components/Home';
 import ServerSelector from './components/ServerSelector';
+import WakeUpBanner from './components/WakeUpBanner';
 import { FHIRServerProvider } from './contexts/FHIRServerContext';
 
 const queryClient = new QueryClient({
@@ -20,6 +21,7 @@ function App() {
     <FHIRServerProvider>
       <QueryClientProvider client={queryClient}>
         <Router>
+          <WakeUpBanner />
           <div className="app">
             <nav className="navbar">
               <div className="nav-brand">
