@@ -3,25 +3,26 @@ import { useState, useEffect } from 'react';
 import { healthAPI } from '../api/client';
 
 export default function WakeUpBanner() {
-  const [dismissed, setDismissed] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
 
-  const { isSuccess, isError, isPending } = useQuery({
+  const { isSuccess } = useQuery({
     queryKey: ['backend-wake-up'],
     queryFn: () => healthAPI.check(),
-    retry: 10,
+    retry: 100,
     retryDelay: 3000,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
+  // Only show the banner if the backend hasn't responded within 2 seconds.
+  // This prevents a flash on fast connections where the health check succeeds immediately.
   useEffect(() => {
-    if (isSuccess) {
-      setDismissed(true);
-    }
+    if (isSuccess) return;
+    const timer = setTimeout(() => setShowBanner(true), 2000);
+    return () => clearTimeout(timer);
   }, [isSuccess]);
 
-  if (dismissed || isSuccess) return null;
-  if (!isPending && !isError) return null;
+  if (isSuccess || !showBanner) return null;
 
   return (
     <div className="wakeup-banner">
