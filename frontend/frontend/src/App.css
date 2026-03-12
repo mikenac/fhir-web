@@ -498,28 +498,86 @@ body {
   font-size: 1rem;
 }
 
-/* Clinical data column - scrollable */
+/* Clinical data column */
 .clinical-data-column {
   max-height: calc(100vh - 12rem);
+}
+
+/* Clinical Tabs */
+.clinical-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 0;
+}
+
+.clinical-tab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.clinical-tab:hover {
+  color: var(--primary-color);
+  background: var(--background);
+}
+
+.clinical-tab.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.clinical-tab.active .tab-badge {
+  background: var(--primary-color);
+  color: white;
+}
+
+.clinical-tab-content {
+  max-height: calc(100vh - 16rem);
   overflow-y: auto;
   padding-right: 0.5rem;
 }
 
-.clinical-data-column::-webkit-scrollbar {
+.clinical-tab-content::-webkit-scrollbar {
   width: 8px;
 }
 
-.clinical-data-column::-webkit-scrollbar-track {
+.clinical-tab-content::-webkit-scrollbar-track {
   background: var(--background);
   border-radius: 4px;
 }
 
-.clinical-data-column::-webkit-scrollbar-thumb {
+.clinical-tab-content::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
 }
 
-.clinical-data-column::-webkit-scrollbar-thumb:hover {
+.clinical-tab-content::-webkit-scrollbar-thumb:hover {
   background: var(--secondary-color);
 }
 
@@ -629,6 +687,10 @@ body {
   }
 
   .clinical-data-column {
+    max-height: none;
+  }
+
+  .clinical-tab-content {
     max-height: none;
     overflow-y: visible;
   }
