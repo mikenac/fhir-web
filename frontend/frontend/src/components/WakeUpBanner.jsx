@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export default function WakeUpBanner() {
+  const queryClient = useQueryClient();
   const [showBanner, setShowBanner] = useState(false);
   const [backendUp, setBackendUp] = useState(false);
   const inFlight = useRef(false);
@@ -32,6 +34,8 @@ export default function WakeUpBanner() {
           console.log('[WakeUpBanner] Backend is up');
           setBackendUp(true);
           clearInterval(pollTimer);
+          // Refetch all queries that failed while the backend was down
+          queryClient.invalidateQueries();
         }
       } catch {
         // still down or timed out
