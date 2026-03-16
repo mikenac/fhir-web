@@ -65,6 +65,31 @@ class PractitionerSummary(BaseModel):
     email: str | None = None
 
 
+class ReferralSummary(BaseModel):
+    """Referral-specific summary for the dashboard."""
+
+    id: str
+    patient_id: str
+    patient_display: str | None = None
+    status: str
+    intent: str
+    category_display: str | None = None
+    code_display: str
+    priority: str | None = None
+    authored_on: datetime | None = None
+    requester_display: str | None = None
+    performer_display: str | None = None
+    note: str | None = None
+
+
+class ReferralDashboardResponse(BaseModel):
+    """Dashboard response with referrals and summary metrics."""
+
+    total: int
+    results: list[ReferralSummary]
+    status_counts: dict[str, int]
+
+
 class SearchResultsResponse(BaseModel):
     """Generic search results response."""
 

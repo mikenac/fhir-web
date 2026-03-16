@@ -12,6 +12,11 @@ dependencies = [
     "pyjwt==2.11.0",
     "cryptography==44.0.0",
     "python-fhir-client",
+    "sqlalchemy==2.0.36",
+    "duckdb==1.2.1",
+    "duckdb-engine==0.15.0",
+    "alembic==1.14.1",
+    "pytz>=2026.1.post1",
 ]
 
 [build-system]

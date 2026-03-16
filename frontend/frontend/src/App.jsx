@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
 import PatientDetail from './components/PatientDetail';
 import Home from './components/Home';
+import PipelineBoard from './components/PipelineBoard';
+import ReferralDashboard from './components/ReferralDashboard';
 import ServerSelector from './components/ServerSelector';
 import WakeUpBanner from './components/WakeUpBanner';
 import { FHIRServerProvider } from './contexts/FHIRServerContext';
@@ -29,6 +31,10 @@ function App() {
                   <h1>FHIR Patient Finder</h1>
                 </Link>
               </div>
+              <div className="nav-links">
+                <Link to="/referrals">Referral Dashboard</Link>
+                <Link to="/pipeline">Pipeline Board</Link>
+              </div>
               <ServerSelector />
             </nav>
 
@@ -36,6 +42,8 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/patients/:patientId" element={<PatientDetail />} />
+                <Route path="/referrals" element={<ReferralDashboard />} />
+                <Route path="/pipeline" element={<PipelineBoard />} />
               </Routes>
             </main>
           </div>

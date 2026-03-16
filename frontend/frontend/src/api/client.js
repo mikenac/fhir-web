@@ -86,11 +86,11 @@ export const clinicalAPI = {
   getPatientMedications: (patientId, server = null) =>
     apiClient.get(`/api/clinical/patients/${patientId}/medications`, addServerParam(server)),
 
-  // Referrals
+  // Referrals (ServiceRequests)
   createReferral: (referral, server = null) =>
     apiClient.post('/api/clinical/referrals', referral, addServerParam(server)),
   getPatientReferrals: (patientId, server = null) =>
-    apiClient.get(`/api/clinical/patients/${patientId}/referrals`, addServerParam(server)),
+    apiClient.get('/api/operational/service-requests', addServerParam(server, { params: { patient_id: patientId } })),
 };
 
 // Operational API
@@ -112,6 +112,18 @@ export const operationalAPI = {
   getPatientCoverage: (patientId, server = null) =>
     apiClient.get(`/api/operational/patients/${patientId}/coverage`, addServerParam(server)),
 
+  // Referral Dashboard
+  getReferralDashboard: (filters = {}, server = null) =>
+    apiClient.get('/api/operational/referrals/dashboard', addServerParam(server, {
+      params: {
+        ...(filters.status && { status: filters.status }),
+        ...(filters.patientId && { patient_id: filters.patientId }),
+        ...(filters.authoredAfter && { authored_after: filters.authoredAfter }),
+        ...(filters.authoredBefore && { authored_before: filters.authoredBefore }),
+        ...(filters.count && { _count: filters.count }),
+      },
+    })),
+
   // Scheduling
   createSchedule: (schedule, server = null) =>
     apiClient.post('/api/operational/schedules', schedule, addServerParam(server)),
@@ -121,6 +133,42 @@ export const operationalAPI = {
     apiClient.post('/api/operational/slots', slot, addServerParam(server)),
   getScheduleSlots: (scheduleId, server = null) =>
     apiClient.get(`/api/operational/schedules/${scheduleId}/slots`, addServerParam(server)),
+};
+
+// Pipeline API (local DB — no FHIR server param)
+export const pipelineAPI = {
+  // Stages
+  getStages: (pipelineType) =>
+    apiClient.get(`/api/pipeline/stages/${pipelineType}`),
+  getBoard: (pipelineType) =>
+    apiClient.get(`/api/pipeline/board/${pipelineType}`),
+
+  // Referrals
+  createReferral: (data) =>
+    apiClient.post('/api/pipeline/referrals', data),
+  getReferral: (id) =>
+    apiClient.get(`/api/pipeline/referrals/${id}`),
+  updateReferral: (id, data) =>
+    apiClient.patch(`/api/pipeline/referrals/${id}`, data),
+  listReferrals: (params = {}) =>
+    apiClient.get('/api/pipeline/referrals', { params }),
+
+  // Transitions
+  createTransition: (referralId, data) =>
+    apiClient.post(`/api/pipeline/referrals/${referralId}/transitions`, data),
+  getHistory: (referralId) =>
+    apiClient.get(`/api/pipeline/referrals/${referralId}/transitions`),
+
+  // Metrics
+  getMetrics: (pipelineType, params = {}) =>
+    apiClient.get(`/api/pipeline/metrics/${pipelineType}`, { params }),
+};
+
+// Webhook subscription API
+export const webhookAPI = {
+  subscribe: () => apiClient.post('/api/webhooks/subscribe'),
+  unsubscribe: () => apiClient.delete('/api/webhooks/subscribe'),
+  status: () => apiClient.get('/api/webhooks/status'),
 };
 
 // Health check

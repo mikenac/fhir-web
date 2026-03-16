@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clinicalAPI } from '../api/client';
+import { useFHIRServer } from '../contexts/FHIRServerContext';
 
 function ClinicalData() {
   const [patientId, setPatientId] = useState('');
@@ -39,14 +40,16 @@ function ClinicalData() {
 }
 
 function ClinicalDataDisplay({ patientId }) {
+  const { selectedServer } = useFHIRServer();
+
   const {
     data: encounters,
     isLoading: encountersLoading,
     error: encountersError,
   } = useQuery({
-    queryKey: ['encounters', patientId],
+    queryKey: ['encounters', patientId, selectedServer],
     queryFn: async () => {
-      const response = await clinicalAPI.getPatientEncounters(patientId);
+      const response = await clinicalAPI.getPatientEncounters(patientId, selectedServer);
       return response.data;
     },
   });
@@ -56,9 +59,9 @@ function ClinicalDataDisplay({ patientId }) {
     isLoading: ordersLoading,
     error: ordersError,
   } = useQuery({
-    queryKey: ['orders', patientId],
+    queryKey: ['orders', patientId, selectedServer],
     queryFn: async () => {
-      const response = await clinicalAPI.getPatientOrders(patientId);
+      const response = await clinicalAPI.getPatientOrders(patientId, selectedServer);
       return response.data;
     },
   });
@@ -68,9 +71,9 @@ function ClinicalDataDisplay({ patientId }) {
     isLoading: medicationsLoading,
     error: medicationsError,
   } = useQuery({
-    queryKey: ['medications', patientId],
+    queryKey: ['medications', patientId, selectedServer],
     queryFn: async () => {
-      const response = await clinicalAPI.getPatientMedications(patientId);
+      const response = await clinicalAPI.getPatientMedications(patientId, selectedServer);
       return response.data;
     },
   });
@@ -80,9 +83,9 @@ function ClinicalDataDisplay({ patientId }) {
     isLoading: referralsLoading,
     error: referralsError,
   } = useQuery({
-    queryKey: ['referrals', patientId],
+    queryKey: ['referrals', patientId, selectedServer],
     queryFn: async () => {
-      const response = await clinicalAPI.getPatientReferrals(patientId);
+      const response = await clinicalAPI.getPatientReferrals(patientId, selectedServer);
       return response.data;
     },
   });

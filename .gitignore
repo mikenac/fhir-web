@@ -54,5 +54,10 @@ Thumbs.db
 keys/
 *.pem
 *.jwk
+
+# DuckDB database files
+*.duckdb
+*.duckdb.wal
+backend/data/
 uv.lock
 uv.lock

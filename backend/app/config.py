@@ -1,9 +1,14 @@
 """Application configuration using pydantic-settings."""
 
-from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    _settings_instance: "Settings | None" = None
+else:
+    _settings_instance = None
 
 
 class Settings(BaseSettings):
@@ -37,7 +42,7 @@ class Settings(BaseSettings):
 
     # CORS Settings
     cors_origins: list[str] | str = Field(
-        default=["http://localhost:5173", "http://localhost:3000"],
+        default=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
         description="Allowed CORS origins (JSON array or comma-separated string)",
     )
 
@@ -77,8 +82,30 @@ class Settings(BaseSettings):
         description="JWT signing algorithm (RS256, RS384, or RS512)",
     )
 
+    # Database Settings (DuckDB)
+    database_url: str = Field(
+        default="duckdb:///data/referrals.duckdb",
+        description="DuckDB connection string (file path after duckdb:///)",
+    )
 
-@lru_cache
+    # Webhook Settings
+    webhook_base_url: str = Field(
+        default="http://localhost:8000",
+        description="Public base URL for webhook callbacks (e.g., Render URL)",
+    )
+
+    # Organization Identity
+    org_id: str | None = Field(
+        default=None,
+        description="UUID of this organization for referral direction",
+    )
+    org_name: str = Field(
+        default="My Organization",
+        description="Display name of this organization",
+    )
+
+
 def get_settings() -> Settings:
-    """Get cached settings instance."""
+    """Get settings instance."""
+    # Temporarily disable caching for CORS fix
     return Settings()
