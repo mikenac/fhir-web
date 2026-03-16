@@ -1,0 +1,29 @@
+# frontend/frontend/.dockerignore
+# Files and directories excluded from the Docker build context.
+
+# node_modules — Docker installs its own inside the image via `npm install`.
+# Copying the host's node_modules would be slow, large, and potentially
+# contain platform-specific binaries that won't work inside the container.
+node_modules/
+
+# Vite build output — we run the dev server, not a pre-built bundle.
+dist/
+
+# Local environment overrides — env vars are set in docker-compose.yml.
+.env
+.env.local
+.env.*.local
+
+# IDE / editor config.
+.vscode/
+.idea/
+
+# Git history.
+.git/
+.gitignore
+
+# macOS noise.
+.DS_Store
+
+# Test artifacts.
+coverage/

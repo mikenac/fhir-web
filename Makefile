@@ -1,4 +1,4 @@
-.PHONY: install dev run-backend run-frontend run format lint typecheck test clean help
+.PHONY: install dev run-backend run-frontend run format lint typecheck test clean help run-local run-local-d stop-local logs-local clean-local
 
 # Install dependencies
 install:
@@ -72,6 +72,40 @@ clean:
 	@echo "Cleaning frontend artifacts..."
 	cd frontend && rm -rf node_modules dist .vite 2>/dev/null || true
 
+# --- Docker Compose (local full stack with HAPI FHIR) ---
+
+# Start all services (backend, frontend, HAPI FHIR) via Docker Compose
+run-local:
+	@echo "Starting full local stack (backend + frontend + HAPI FHIR)..."
+	@echo "This may take 1-2 minutes on first run (HAPI JVM startup)."
+	docker compose up --build
+
+# Start in detached mode
+run-local-d:
+	@echo "Starting full local stack in background..."
+	docker compose up --build -d
+	@echo ""
+	@echo "Services:"
+	@echo "  Frontend:  http://localhost:5173"
+	@echo "  Backend:   http://localhost:8000"
+	@echo "  HAPI FHIR: http://localhost:8090"
+	@echo ""
+	@echo "Use 'make logs-local' to tail logs, 'make stop-local' to stop."
+
+# Stop all Docker Compose services
+stop-local:
+	docker compose down
+
+# Tail logs from all services
+logs-local:
+	docker compose logs -f
+
+# Stop and remove volumes (full reset)
+clean-local:
+	@echo "Stopping services and removing volumes..."
+	docker compose down -v
+	@echo "Local stack cleaned."
+
 # Help command
 help:
 	@echo "FHIR Web Service - Available Commands:"
@@ -90,6 +124,13 @@ help:
 	@echo "  make lint         - Lint code (ruff, black, basedpyright)"
 	@echo "  make typecheck    - Type check only"
 	@echo "  make test         - Run tests"
+	@echo ""
+	@echo "Docker (full local stack):"
+	@echo "  make run-local    - Start backend + frontend + HAPI FHIR"
+	@echo "  make run-local-d  - Start in background (detached)"
+	@echo "  make stop-local   - Stop all services"
+	@echo "  make logs-local   - Tail service logs"
+	@echo "  make clean-local  - Stop and remove volumes"
 	@echo ""
 	@echo "Production:"
 	@echo "  make build        - Build frontend for production"

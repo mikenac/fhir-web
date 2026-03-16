@@ -1,0 +1,114 @@
+# docker-compose.yml
+# Local development environment for fhir_web.
+#
+# Services:
+#   hapi-fhir  — Local HAPI FHIR R4 server (port 8090 on host)
+#   backend    — FastAPI application      (port 8000 on host)
+#   frontend   — Vite dev server          (port 5173 on host)
+#
+# Usage:
+#   docker compose up --build      # first run (builds images)
+#   docker compose up              # subsequent runs (uses cached images)
+#   docker compose down            # stop and remove containers
+#   docker compose down -v         # also remove the DuckDB named volume
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # HAPI FHIR Server
+  # ---------------------------------------------------------------------------
+  # Runs a local R4-compliant FHIR server.  Subscriptions (REST-hook) are
+  # enabled so the backend can register webhooks and receive change events.
+  # Data is ephemeral — the container resets on each `down`.
+  # ---------------------------------------------------------------------------
+  hapi-fhir:
+    image: hapiproject/hapi:latest
+    ports:
+      # Map host port 8090 → container port 8080.
+      # The frontend browser talks to HAPI at http://localhost:8090/fhir.
+      - "8090:8080"
+    environment:
+      # Enable REST-hook subscriptions so HAPI can POST to our backend webhook.
+      - hapi.fhir.subscription.resthook_enabled=true
+      # Allow any origin for CORS (dev only — tighten this in production).
+      - hapi.fhir.cors.allowed_origin=*
+    healthcheck:
+      # Poll the FHIR capability statement.  Docker will wait until this
+      # returns HTTP 200 before marking the service as "healthy".
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/fhir/metadata || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s   # HAPI JVM startup can take a while
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  # Built from backend/Dockerfile.  Mounts a named volume so the DuckDB file
+  # survives container restarts.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # ---- Database ---------------------------------------------------------
+      # Store the DuckDB file inside the /app/data volume mount.
+      - DATABASE_URL=duckdb:///data/referrals.duckdb
+
+      # ---- CORS -------------------------------------------------------------
+      # Allow the Vite dev server and any common local origin.
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+
+      # ---- Webhook URLs -----------------------------------------------------
+      # IMPORTANT: Both of these use Docker-internal hostnames, NOT localhost.
+      #
+      # WEBHOOK_BASE_URL  — the URL that HAPI will POST to when a subscription
+      #   fires.  Must be the backend's hostname on the Docker network so that
+      #   container-to-container traffic works.  "backend" resolves inside the
+      #   compose network; "localhost" would resolve to HAPI's own container.
+      - WEBHOOK_BASE_URL=http://backend:8000
+
+      # WEBHOOK_FHIR_URL  — the FHIR server the backend talks to when setting
+      #   up subscriptions or querying resources.  "hapi-fhir" is the service
+      #   name above and resolves via Docker DNS.
+      - WEBHOOK_FHIR_URL=http://hapi-fhir:8080/fhir
+
+      # ---- Misc -------------------------------------------------------------
+      - DEBUG=false
+    volumes:
+      # Named volume so DuckDB data persists across `docker compose down` (but
+      # not `docker compose down -v`).
+      - backend-data:/app/data
+    depends_on:
+      hapi-fhir:
+        condition: service_healthy   # wait for HAPI to pass its healthcheck
+
+  # ---------------------------------------------------------------------------
+  # React / Vite Frontend
+  # ---------------------------------------------------------------------------
+  # Built from frontend/frontend/Dockerfile.  The Vite dev server is exposed
+  # on port 5173.  Hot-module replacement (HMR) works because Vite binds to
+  # 0.0.0.0 inside the container.
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      # Tell the browser (not the container) where the API lives.
+      # This is read at *runtime* by Vite; it must be a host-reachable address.
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+# -----------------------------------------------------------------------------
+# Named Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  # Persists the DuckDB database file between container restarts.
+  backend-data:

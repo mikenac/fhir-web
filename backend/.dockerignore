@@ -1,0 +1,48 @@
+# backend/.dockerignore
+# Files and directories that should NOT be copied into the Docker build context.
+# A smaller build context = faster builds and smaller images.
+
+# Virtual environment — Docker builds its own inside the image via uv sync.
+.venv/
+
+# DuckDB data files — these are mounted as a named volume at runtime.
+data/
+*.duckdb
+*.duckdb.wal
+
+# Python bytecode — Docker will regenerate these at runtime.
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test artifacts — not needed in the production image.
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# IDE / editor config — irrelevant inside the container.
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git history — not needed to run the app.
+.git/
+.gitignore
+
+# Local environment overrides — env vars are supplied by docker-compose.yml.
+.env
+.env.local
+
+# Private keys — never bake secrets into an image.
+keys/
+*.pem
+*.jwk
+
+# uv lock file — not committed to git per project rules, and uv sync
+# works from pyproject.toml alone.
+uv.lock
+
+# macOS noise.
+.DS_Store
