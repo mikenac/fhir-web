@@ -40,9 +40,11 @@ keys/
 *.pem
 *.jwk
 
-# uv lock file — not committed to git per project rules, and uv sync
-# works from pyproject.toml alone.
-uv.lock
+# uv.lock IS copied into the image so `uv sync --frozen` can reproduce the
+# exact pinned dependency set without re-resolving packages at build time.
+# This is critical for the git-sourced python-fhir-client dep, which is
+# pinned to a specific commit SHA in the lockfile.
+# Do NOT add uv.lock back here.
 
 # macOS noise.
 .DS_Store

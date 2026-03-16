@@ -26,5 +26,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
+[tool.uv]
+# Always resolve from the public PyPI index so lockfile URLs are reachable
+# in Docker and on CI, regardless of any private mirror configured on the
+# developer's machine.
+index-url = "https://pypi.org/simple"
+
 [tool.uv.sources]
 python-fhir-client = { git = "https://github.com/mikenac/python-fhir-client.git", branch = "main" }

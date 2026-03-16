@@ -28,15 +28,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 # ---- Dependency files first (layer caching) ---------------------------------
-# Copying only pyproject.toml before the rest of the source means Docker can
-# cache the `uv sync` layer.  The layer is only rebuilt when pyproject.toml
-# changes, not on every source-code change.
-COPY pyproject.toml .
+# Copy both pyproject.toml AND uv.lock before the rest of the source so
+# Docker can cache the `uv sync` layer.  The layer is only rebuilt when either
+# of these files changes, not on every source-code change.
+COPY pyproject.toml uv.lock ./
 
 # ---- Install Python dependencies --------------------------------------------
-# --no-dev: skip development/test dependencies in production.
+# --frozen: requires the lockfile to exist and refuses to update it, ensuring
+#   every build uses the exact same pinned versions (reproducible builds).
+#   This is especially important for the git-sourced python-fhir-client dep.
+# --no-dev: skip development/test dependencies in the production image.
 # uv creates a virtual environment at /app/.venv automatically.
-RUN uv sync --no-dev
+RUN uv sync --frozen --no-dev
 
 # ---- Copy application source ------------------------------------------------
 # Comes after dependency install so code changes don't invalidate the
