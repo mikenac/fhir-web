@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { pipelineAPI, webhookAPI, clinicalAPI } from '../api/client';
 
 const PRIORITY_COLORS = {
@@ -32,8 +33,17 @@ function formatDuration(seconds) {
 }
 
 /**
- * Hardcoded test payload for the HAPI FHIR webhook demo.
- * Creates a ServiceRequest on HAPI that triggers a webhook back to the backend.
+ * Preset FHIR server options for webhook subscriptions.
+ * Users can switch between the public HAPI cloud server and a local Docker instance.
+ */
+const WEBHOOK_FHIR_SERVERS = [
+  { id: 'hapi-public', label: 'HAPI Public', url: 'https://hapi.fhir.org/baseR4' },
+  { id: 'hapi-local', label: 'HAPI Local (Docker)', url: 'http://localhost:8090/fhir' },
+];
+
+/**
+ * Payload used when routing the test referral through the backend's
+ * createReferral endpoint (public HAPI path).
  */
 const TEST_REFERRAL_PAYLOAD = {
   patient_id: 'example',
@@ -46,6 +56,31 @@ const TEST_REFERRAL_PAYLOAD = {
   note: 'Test referral created via webhook demo',
 };
 
+/**
+ * Post a minimal ServiceRequest directly to a FHIR server.
+ * Used for the local Docker HAPI target, which the backend proxy doesn't route to.
+ * @param {string} fhirUrl - Base URL of the FHIR server (e.g. 'http://localhost:8090/fhir')
+ * @returns {Promise} Axios promise resolving to the created resource
+ */
+const createTestReferralOnServer = (fhirUrl) => {
+  const payload = {
+    resourceType: 'ServiceRequest',
+    status: 'active',
+    intent: 'order',
+    subject: { reference: 'Patient/test123', display: 'Test Patient' },
+    requester: { display: 'Dr. Smith' },
+    code: {
+      coding: [{ system: 'http://snomed.info/sct', code: '394579002', display: 'Cardiology' }],
+    },
+    priority: 'routine',
+    note: [{ text: 'Test referral created via webhook demo' }],
+  };
+  // Post directly to the FHIR server — bypasses the FastAPI backend
+  return axios.post(`${fhirUrl}/ServiceRequest`, payload, {
+    headers: { 'Content-Type': 'application/fhir+json' },
+  });
+};
+
 export default function PipelineBoard() {
   const queryClient = useQueryClient();
   const [pipelineType, setPipelineType] = useState('incoming');
@@ -54,6 +89,8 @@ export default function PipelineBoard() {
   const [moveToStageId, setMoveToStageId] = useState('');
   // Toast message shown after "Create Test Referral" succeeds
   const [toast, setToast] = useState(null);
+  // Which FHIR server to subscribe to for webhooks — defaults to public HAPI
+  const [webhookFhirUrl, setWebhookFhirUrl] = useState(WEBHOOK_FHIR_SERVERS[0].url);
 
   // Auto-dismiss toast after 4 seconds
   useEffect(() => {
@@ -75,9 +112,9 @@ export default function PipelineBoard() {
 
   const isSubscribed = webhookStatus?.active === true;
 
-  // Subscribe mutation
+  // Subscribe mutation — passes the currently selected FHIR server URL
   const subscribeMutation = useMutation({
-    mutationFn: () => webhookAPI.subscribe(),
+    mutationFn: () => webhookAPI.subscribe(webhookFhirUrl),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhookStatus'] });
     },
@@ -97,11 +134,22 @@ export default function PipelineBoard() {
     },
   });
 
-  // Create test referral on HAPI to fire a webhook
+  // Create test referral on the selected FHIR server to fire a webhook.
+  // When targeting local HAPI the request goes directly to the Docker instance;
+  // when targeting public HAPI it routes through the backend proxy as before.
   const testReferralMutation = useMutation({
-    mutationFn: () => clinicalAPI.createReferral(TEST_REFERRAL_PAYLOAD, 'hapi'),
+    mutationFn: () => {
+      const isLocal = webhookFhirUrl.includes('localhost');
+      if (isLocal) {
+        // Direct POST — backend proxy doesn't know about the local Docker URL
+        return createTestReferralOnServer(webhookFhirUrl);
+      }
+      // Route through the backend for public HAPI so auth/logging applies
+      return clinicalAPI.createReferral(TEST_REFERRAL_PAYLOAD, 'hapi');
+    },
     onSuccess: () => {
-      setToast('Test referral created on HAPI — webhook should arrive shortly.');
+      const serverLabel = WEBHOOK_FHIR_SERVERS.find((s) => s.url === webhookFhirUrl)?.label ?? webhookFhirUrl;
+      setToast(`Test referral created on ${serverLabel} — webhook should arrive shortly.`);
       // Proactively refresh the board so the incoming referral appears
       queryClient.invalidateQueries({ queryKey: ['pipelineBoard'] });
       queryClient.invalidateQueries({ queryKey: ['stageReferrals'] });
@@ -251,7 +299,9 @@ export default function PipelineBoard() {
         </div>
       </div>
 
-      {/* Webhook demo toolbar */}
+      {/* Webhook demo toolbar
+          Layout: [FHIR Server select] [Subscribe/Unsubscribe btn] [status pill] | [Create Test Referral btn]
+      */}
       <div
         style={{
           display: 'flex',
@@ -265,38 +315,33 @@ export default function PipelineBoard() {
           boxShadow: 'var(--shadow)',
         }}
       >
-        {/* Subscription status pill */}
-        <span
-          aria-label={isSubscribed ? 'Webhook active' : 'Webhook inactive'}
+        {/* FHIR server selector
+            Disabled while subscribed — changing mid-subscription would be confusing
+            because the existing subscription still points at the old server. */}
+        <select
+          value={webhookFhirUrl}
+          onChange={(e) => setWebhookFhirUrl(e.target.value)}
+          disabled={isSubscribed}
+          aria-label="Webhook target FHIR server"
+          title={isSubscribed ? 'Unsubscribe before changing the target server' : 'Select FHIR server for webhook subscriptions'}
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            padding: '0.25rem 0.75rem',
-            borderRadius: 999,
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            background: isSubscribed ? '#f0fdf4' : '#f1f5f9',
-            color: isSubscribed ? '#166534' : 'var(--text-secondary)',
-            border: `1px solid ${isSubscribed ? '#bbf7d0' : 'var(--border)'}`,
+            padding: '0.35rem 0.6rem',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            background: isSubscribed ? '#f1f5f9' : 'var(--surface)',
+            color: isSubscribed ? 'var(--text-secondary)' : 'var(--text-primary)',
+            fontSize: '0.8rem',
+            fontWeight: 500,
+            cursor: isSubscribed ? 'not-allowed' : 'pointer',
+            minWidth: 160,
           }}
         >
-          {/* Dot indicator */}
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: isSubscribed ? '#22c55e' : '#94a3b8',
-              flexShrink: 0,
-            }}
-          />
-          {webhookStatusLoading
-            ? 'Checking...'
-            : isSubscribed
-            ? 'Listening for webhooks'
-            : 'Not subscribed'}
-        </span>
+          {WEBHOOK_FHIR_SERVERS.map((server) => (
+            <option key={server.id} value={server.url}>
+              {server.label}
+            </option>
+          ))}
+        </select>
 
         {/* Subscribe / Unsubscribe toggle */}
         <button
@@ -334,8 +379,44 @@ export default function PipelineBoard() {
             ? 'Unsubscribing...'
             : isSubscribed
             ? 'Unsubscribe'
-            : 'Subscribe to HAPI'}
+            : 'Subscribe'}
         </button>
+
+        {/* Subscription status pill
+            When subscribed, shows which server is actually receiving events
+            (sourced from the backend status response). */}
+        <span
+          aria-label={isSubscribed ? 'Webhook active' : 'Webhook inactive'}
+          title={isSubscribed && webhookStatus?.fhir_server ? `Subscribed to: ${webhookStatus.fhir_server}` : undefined}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            padding: '0.25rem 0.75rem',
+            borderRadius: 999,
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            background: isSubscribed ? '#f0fdf4' : '#f1f5f9',
+            color: isSubscribed ? '#166534' : 'var(--text-secondary)',
+            border: `1px solid ${isSubscribed ? '#bbf7d0' : 'var(--border)'}`,
+          }}
+        >
+          {/* Animated dot */}
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: isSubscribed ? '#22c55e' : '#94a3b8',
+              flexShrink: 0,
+            }}
+          />
+          {webhookStatusLoading
+            ? 'Checking...'
+            : isSubscribed
+            ? `Listening · ${WEBHOOK_FHIR_SERVERS.find((s) => s.url === webhookStatus?.fhir_server)?.label ?? 'Custom'}`
+            : 'Not subscribed'}
+        </span>
 
         {/* Divider */}
         <span
@@ -343,14 +424,16 @@ export default function PipelineBoard() {
           style={{ width: 1, height: 22, background: 'var(--border)', flexShrink: 0 }}
         />
 
-        {/* Create test referral */}
+        {/* Create test referral
+            Routes directly to the FHIR server if targeting localhost,
+            otherwise goes through the backend proxy. */}
         <button
           onClick={() => testReferralMutation.mutate()}
           disabled={!isSubscribed || testReferralMutation.isPending}
           title={
             !isSubscribed
-              ? 'Subscribe to HAPI webhooks first'
-              : 'Create a test ServiceRequest on HAPI to trigger a webhook'
+              ? 'Subscribe to FHIR webhooks first'
+              : `Create a test ServiceRequest on ${WEBHOOK_FHIR_SERVERS.find((s) => s.url === webhookFhirUrl)?.label ?? 'selected server'} to trigger a webhook`
           }
           style={{
             display: 'inline-flex',

@@ -93,6 +93,10 @@ class Settings(BaseSettings):
         default="http://localhost:8000",
         description="Public base URL for webhook callbacks (e.g., Render URL)",
     )
+    webhook_fhir_url: str = Field(
+        default="https://hapi.fhir.org/baseR4",
+        description="FHIR server base URL for webhook subscriptions (e.g., http://localhost:8090/fhir for local HAPI Docker)",
+    )
 
     # Organization Identity
     org_id: str | None = Field(

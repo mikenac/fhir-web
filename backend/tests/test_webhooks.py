@@ -120,7 +120,10 @@ def client(db_session: Session):
     app.dependency_overrides[get_db_session] = _override
 
     # Reset subscription state so tests are isolated.
+    # Clear both the subscription ID and the stored FHIR URL so one test's
+    # subscribe call cannot bleed into the next test's status/unsubscribe check.
     webhooks_module._subscription_state["subscription_id"] = None
+    webhooks_module._subscription_state["fhir_url"] = None
 
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -188,7 +191,8 @@ class TestWebhookReceiver:
         referral = db_session.get(Referral, uuid.UUID(referral_id))
         assert referral is not None
         assert referral.fhir_service_request_id == "sr-hapi-001"
-        assert referral.fhir_server == webhooks_module.HAPI_FHIR_BASE_URL
+        # fhir_server should match the default webhook_fhir_url from Settings.
+        assert referral.fhir_server == "https://hapi.fhir.org/baseR4"
         assert referral.patient_id == "p-123"
         assert referral.patient_display == "Jane Doe"
         assert referral.requester_display == "Dr. Smith"
@@ -351,7 +355,8 @@ class TestWebhookPutReceiver:
         assert referral is not None
         # The FHIR id comes from the body, not the URL path param.
         assert referral.fhir_service_request_id == "sr-hapi-001"
-        assert referral.fhir_server == webhooks_module.HAPI_FHIR_BASE_URL
+        # fhir_server should match the default webhook_fhir_url from Settings.
+        assert referral.fhir_server == "https://hapi.fhir.org/baseR4"
         assert referral.patient_id == "p-123"
         assert referral.patient_display == "Jane Doe"
         assert referral.requester_display == "Dr. Smith"
@@ -542,13 +547,18 @@ class TestSubscribe:
 
 class TestStatus:
     def test_status_inactive_by_default(self, client: TestClient) -> None:
-        """Status endpoint should report inactive when no subscription is registered."""
+        """Status endpoint should report inactive when no subscription is registered.
+
+        When no subscription is active, fhir_server falls back to the
+        webhook_fhir_url setting (default: the public HAPI sandbox URL).
+        """
         resp = client.get("/api/webhooks/status")
         assert resp.status_code == 200
         data = resp.json()
         assert data["active"] is False
         assert data["subscription_id"] is None
-        assert data["fhir_server"] == webhooks_module.HAPI_FHIR_BASE_URL
+        # Should fall back to the settings default when no subscription is active.
+        assert data["fhir_server"] == "https://hapi.fhir.org/baseR4"
 
     def test_status_active_after_subscribe(self, client: TestClient) -> None:
         """Status endpoint should report active once a subscription ID is stored."""

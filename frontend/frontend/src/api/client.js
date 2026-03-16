@@ -166,7 +166,15 @@ export const pipelineAPI = {
 
 // Webhook subscription API
 export const webhookAPI = {
-  subscribe: () => apiClient.post('/api/webhooks/subscribe'),
+  /**
+   * Subscribe to FHIR webhooks.
+   * @param {string|null} fhirUrl - Optional FHIR server URL to subscribe to.
+   *   If omitted, the backend uses its default (from env var).
+   *   Example: 'http://localhost:8090/fhir' for a local Docker HAPI instance.
+   */
+  subscribe: (fhirUrl) => apiClient.post('/api/webhooks/subscribe', null, {
+    params: fhirUrl ? { fhir_url: fhirUrl } : {},
+  }),
   unsubscribe: () => apiClient.delete('/api/webhooks/subscribe'),
   status: () => apiClient.get('/api/webhooks/status'),
 };
