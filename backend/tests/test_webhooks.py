@@ -4,6 +4,9 @@ Covers:
   - POST /api/webhooks/hapi with a valid ServiceRequest → creates Referral + StageTransition
   - POST /api/webhooks/hapi with same FHIR ID → updates, no duplicate
   - POST /api/webhooks/hapi with malformed / empty body → graceful handling
+  - PUT  /api/webhooks/hapi/ServiceRequest/{id} → creates Referral (HAPI default delivery)
+  - PUT  /api/webhooks/hapi/ServiceRequest/{id} with same FHIR ID → updates, no duplicate
+  - PUT  /api/webhooks/hapi/{non-ServiceRequest}/{id} → skipped gracefully
   - POST /api/webhooks/subscribe → mock httpx, check subscription_id stored
   - GET  /api/webhooks/status → reflects current state
   - DELETE /api/webhooks/subscribe → mock httpx, clears state
@@ -312,6 +315,166 @@ class TestWebhookReceiver:
         assert referral.patient_display is None
         assert referral.note is None
         assert referral.priority is None
+
+
+# ---------------------------------------------------------------------------
+# PUT webhook receiver tests (HAPI default delivery mode)
+# ---------------------------------------------------------------------------
+
+
+class TestWebhookPutReceiver:
+    """Tests for PUT /api/webhooks/hapi/ServiceRequest/{id}.
+
+    HAPI FHIR (R4, newer versions) delivers rest-hook notifications via PUT
+    instead of POST.  The resource type and ID come from the URL path, and the
+    full FHIR resource JSON is in the request body.
+    """
+
+    def test_put_new_service_request_creates_referral(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """A first-time PUT should create a Referral row and a StageTransition."""
+        # HAPI appends /ServiceRequest/{id} to the subscription endpoint URL.
+        resp = client.put(
+            "/api/webhooks/hapi/ServiceRequest/sr-put-001",
+            json=VALID_SERVICE_REQUEST,
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "processed"
+        referral_id = data["referral_id"]
+        assert referral_id  # non-empty UUID string
+
+        # Verify the Referral was written with correct fields.
+        referral = db_session.get(Referral, uuid.UUID(referral_id))
+        assert referral is not None
+        # The FHIR id comes from the body, not the URL path param.
+        assert referral.fhir_service_request_id == "sr-hapi-001"
+        assert referral.fhir_server == webhooks_module.HAPI_FHIR_BASE_URL
+        assert referral.patient_id == "p-123"
+        assert referral.patient_display == "Jane Doe"
+        assert referral.requester_display == "Dr. Smith"
+        assert referral.performer_display == "Dr. Jones"
+        assert referral.priority == "routine"
+        assert referral.note == "Urgent cardiology follow-up needed"
+        assert referral.pipeline_type == "incoming"
+        assert referral.source == "fhir_sync"
+
+        # Verify the initial StageTransition audit entry exists.
+        transitions = (
+            db_session.execute(
+                select(StageTransition).where(
+                    StageTransition.referral_id == referral.id
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(transitions) == 1
+        assert transitions[0].from_stage_id is None
+        assert transitions[0].actor == "fhir_webhook"
+        assert transitions[0].outcome == "advanced"
+
+    def test_put_duplicate_service_request_updates_not_duplicates(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """Sending the same FHIR ID via PUT twice should update, not duplicate."""
+        # First PUT creates the referral.
+        resp1 = client.put(
+            "/api/webhooks/hapi/ServiceRequest/sr-hapi-001",
+            json=VALID_SERVICE_REQUEST,
+        )
+        assert resp1.json()["status"] == "processed"
+
+        # Second PUT with an updated field should update in place.
+        updated_payload = {**VALID_SERVICE_REQUEST, "priority": "urgent"}
+        resp2 = client.put(
+            "/api/webhooks/hapi/ServiceRequest/sr-hapi-001",
+            json=updated_payload,
+        )
+        assert resp2.status_code == 200
+        assert resp2.json()["status"] == "updated"
+        # Same referral ID returned.
+        assert resp2.json()["referral_id"] == resp1.json()["referral_id"]
+
+        # Only one Referral row should exist.
+        rows = (
+            db_session.execute(
+                select(Referral).where(
+                    Referral.fhir_service_request_id == "sr-hapi-001"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].priority == "urgent"
+
+        # Still only one StageTransition (no second one was created).
+        transitions = (
+            db_session.execute(
+                select(StageTransition).where(
+                    StageTransition.referral_id == rows[0].id
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(transitions) == 1
+
+    def test_put_non_service_request_resource_type_returns_skipped(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """PUT for a non-ServiceRequest resource type should return 200 / skipped.
+
+        HAPI might theoretically send other resource types.  We should ignore
+        them gracefully and return 200 to prevent HAPI from retrying forever.
+        """
+        resp = client.put(
+            "/api/webhooks/hapi/Observation/obs-001",
+            json={"resourceType": "Observation", "id": "obs-001"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "skipped"
+
+        # No Referral should have been created.
+        rows = db_session.execute(select(Referral)).scalars().all()
+        assert len(rows) == 0
+
+    def test_put_cross_route_dedup_with_post(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """A ServiceRequest seen via POST and then via PUT should still dedup.
+
+        The upsert key is (fhir_service_request_id, fhir_server), regardless of
+        which HTTP method delivered the notification.
+        """
+        # Create via POST first.
+        resp_post = client.post("/api/webhooks/hapi", json=VALID_SERVICE_REQUEST)
+        assert resp_post.json()["status"] == "processed"
+
+        # Then receive the same resource via PUT — should update, not duplicate.
+        resp_put = client.put(
+            "/api/webhooks/hapi/ServiceRequest/sr-hapi-001",
+            json={**VALID_SERVICE_REQUEST, "priority": "stat"},
+        )
+        assert resp_put.status_code == 200
+        assert resp_put.json()["status"] == "updated"
+        assert resp_put.json()["referral_id"] == resp_post.json()["referral_id"]
+
+        # Still exactly one row.
+        rows = (
+            db_session.execute(
+                select(Referral).where(
+                    Referral.fhir_service_request_id == "sr-hapi-001"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].priority == "stat"
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,19 @@
 """Webhook router for HAPI FHIR rest-hook subscriptions.
 
 This module handles two concerns:
-  1. Receiving inbound webhook POSTs from HAPI FHIR when a ServiceRequest changes.
+  1. Receiving inbound webhook POSTs/PUTs from HAPI FHIR when a ServiceRequest changes.
   2. Managing the FHIR Subscription resource on HAPI (create / delete / status).
 
 MVP scope: HAPI FHIR only, rest-hook channel, ServiceRequest resources only.
+
+HAPI delivery modes
+-------------------
+HAPI FHIR (R4) delivers rest-hook notifications in two ways depending on version:
+  - POST /api/webhooks/hapi          — full resource in body (older behaviour)
+  - PUT  /api/webhooks/hapi/ServiceRequest/{id} — full resource in body (newer default)
+
+Both routes delegate to _process_service_request() so the upsert logic lives in
+one place.
 """
 
 import logging
@@ -122,37 +131,26 @@ def _extract_fields_from_service_request(resource: dict[str, Any]) -> dict[str, 
 
 
 # ---------------------------------------------------------------------------
-# Webhook receiver
+# Shared upsert helper — called by both POST and PUT routes
 # ---------------------------------------------------------------------------
 
 
-@router.post("/hapi", status_code=status.HTTP_200_OK)
-async def receive_hapi_webhook(
-    request: Request,
-    db: Session = Depends(get_db_session),
-) -> dict[str, str]:
-    """Receive a FHIR rest-hook notification from HAPI.
+def _process_service_request(body: dict[str, Any], db: Session) -> dict[str, str]:
+    """Parse a ServiceRequest dict and upsert it into the Referral table.
 
-    HAPI POSTs the full ServiceRequest JSON body to this endpoint whenever a
-    ServiceRequest is created or updated.  We parse the payload, then either
-    create a new Referral (if this FHIR resource hasn't been seen before) or
-    update the existing one.
+    This function contains the core upsert logic so it can be shared between the
+    legacy POST route and the newer PUT route that HAPI uses by default.
+
+    Args:
+        body: The raw JSON dict from the incoming HAPI request body.
+        db:   The active SQLAlchemy database session.
 
     Returns:
-        {"status": "processed", "referral_id": "..."} for a new record
-        {"status": "updated",   "referral_id": "..."} for an existing record
-        {"status": "skipped",   "referral_id": ""} if the body is missing/wrong type
+        A dict with keys "status" and "referral_id":
+          {"status": "processed", "referral_id": "<uuid>"}  — new record created
+          {"status": "updated",   "referral_id": "<uuid>"}  — existing record updated
+          {"status": "skipped",   "referral_id": ""}        — body missing or wrong type
     """
-    # --- Parse body ---
-    # We use request.json() rather than a Pydantic body parameter so we can
-    # tolerate any quirky HAPI payload without strict validation.
-    try:
-        body: dict[str, Any] = await request.json()
-    except Exception:
-        # Malformed JSON — log and return a safe 200 so HAPI doesn't retry forever.
-        logger.warning("webhook: received non-JSON body, skipping")
-        return {"status": "skipped", "referral_id": ""}
-
     # Confirm this is a ServiceRequest; HAPI can also send ping/handshake payloads.
     resource_type: str = body.get("resourceType", "")
     if resource_type != "ServiceRequest":
@@ -161,7 +159,7 @@ async def receive_hapi_webhook(
         )
         return {"status": "skipped", "referral_id": ""}
 
-    # --- Extract fields ---
+    # Extract the flat fields we want to persist.
     fields = _extract_fields_from_service_request(body)
     fhir_id: str | None = fields.get("fhir_service_request_id")
 
@@ -196,7 +194,7 @@ async def receive_hapi_webhook(
 
     # --- CREATE path ---
     # Find the first non-terminal stage for the incoming pipeline.
-    # Incoming is the correct direction for referrals arriving via webhook from HAPI.
+    # "Incoming" is the correct direction for referrals arriving via webhook from HAPI.
     first_stage = db.execute(
         select(PipelineStage)
         .where(PipelineStage.pipeline_type == "incoming")
@@ -214,7 +212,7 @@ async def receive_hapi_webhook(
             detail="No active stages configured for incoming pipeline",
         )
 
-    # Build the new Referral row from extracted fields.
+    # Build the new Referral row from the extracted field dict.
     referral = Referral(
         pipeline_type="incoming",
         current_stage_id=first_stage.id,
@@ -234,7 +232,7 @@ async def receive_hapi_webhook(
         source="fhir_sync",
     )
     db.add(referral)
-    # flush assigns referral.id before the StageTransition FK is set
+    # flush() assigns referral.id so we can reference it in the StageTransition FK.
     db.flush()
 
     # Create the initial audit-trail entry (entry into pipeline — no from_stage).
@@ -253,6 +251,94 @@ async def receive_hapi_webhook(
         "webhook: created referral id=%s fhir_id=%s", referral.id, fhir_id
     )
     return {"status": "processed", "referral_id": str(referral.id)}
+
+
+# ---------------------------------------------------------------------------
+# Webhook receivers — POST (legacy) and PUT (HAPI default)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/hapi", status_code=status.HTTP_200_OK)
+async def receive_hapi_webhook(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    """Receive a FHIR rest-hook notification from HAPI via POST.
+
+    Some HAPI versions POST the full ServiceRequest JSON body to the bare
+    endpoint URL.  This route exists for backward-compat and testing.
+
+    Returns:
+        {"status": "processed", "referral_id": "..."} for a new record
+        {"status": "updated",   "referral_id": "..."} for an existing record
+        {"status": "skipped",   "referral_id": ""} if the body is missing/wrong type
+    """
+    # We use request.json() rather than a Pydantic body param so we can tolerate
+    # any quirky HAPI payload without strict validation.
+    try:
+        body: dict[str, Any] = await request.json()
+    except Exception:
+        # Malformed JSON — return 200 so HAPI doesn't retry endlessly.
+        logger.warning("webhook POST: received non-JSON body, skipping")
+        return {"status": "skipped", "referral_id": ""}
+
+    return _process_service_request(body, db)
+
+
+@router.put("/hapi/{resource_type}/{resource_id}", status_code=status.HTTP_200_OK)
+async def receive_hapi_webhook_put(
+    resource_type: str,
+    resource_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    """Receive a FHIR rest-hook notification from HAPI via PUT.
+
+    HAPI (R4, newer versions) delivers notifications as:
+        PUT {endpoint}/ServiceRequest/{id}
+    with the full FHIR resource JSON in the body.
+
+    Our subscription registers the endpoint as:
+        {webhook_base_url}/api/webhooks/hapi
+    and HAPI automatically appends /ServiceRequest/{id}, so the full path
+    becomes:
+        PUT /api/webhooks/hapi/ServiceRequest/{id}
+
+    Path parameters:
+        resource_type: FHIR resource type from the URL (e.g. "ServiceRequest").
+        resource_id:   FHIR resource ID from the URL (e.g. "sr-hapi-001").
+
+    Returns:
+        {"status": "processed", "referral_id": "..."} — new record created
+        {"status": "updated",   "referral_id": "..."} — existing record updated
+        {"status": "skipped",   "referral_id": ""}    — non-ServiceRequest type or bad body
+
+    NOTE: We always return HTTP 200, even for skipped payloads, because a
+    non-200 response causes HAPI to retry the delivery indefinitely.
+    """
+    # Only handle ServiceRequest resources; skip anything else (e.g. Observation).
+    if resource_type != "ServiceRequest":
+        logger.info(
+            "webhook PUT: ignoring resource_type=%s id=%s (expected ServiceRequest)",
+            resource_type,
+            resource_id,
+        )
+        return {"status": "skipped", "referral_id": ""}
+
+    # Parse the request body the same way as the POST handler.
+    try:
+        body: dict[str, Any] = await request.json()
+    except Exception:
+        # Malformed JSON — return 200 so HAPI doesn't retry endlessly.
+        logger.warning(
+            "webhook PUT: received non-JSON body for %s/%s, skipping",
+            resource_type,
+            resource_id,
+        )
+        return {"status": "skipped", "referral_id": ""}
+
+    # Delegate to the shared upsert helper.
+    return _process_service_request(body, db)
 
 
 # ---------------------------------------------------------------------------
