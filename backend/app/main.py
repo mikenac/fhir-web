@@ -1,5 +1,6 @@
 """Main FastAPI application."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -8,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.db.engine import dispose_engine, init_engine
+from app.db.engine import dispose_engine, init_engine, run_migrations
 from app.middleware.error_handlers import (
     connect_error_handler,
     http_status_error_handler,
@@ -23,10 +24,31 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifespan: start DB engine on startup, dispose on shutdown."""
+    """Manage application lifespan: start DB engine on startup, dispose on shutdown.
+
+    Startup order:
+    1. init_engine() — creates the SQLAlchemy engine and session factory.
+    2. run_migrations() — applies any pending Alembic migrations so all tables
+       exist before the first request arrives.  On a fresh Render deploy the
+       DuckDB file is brand-new, so this step is what actually creates the
+       tables.  On subsequent deploys it is a no-op if the schema is current.
+    """
+    import sys
     logger.info("Initializing database engine...")
+    print("LIFESPAN: before init_engine", flush=True, file=sys.stderr)
     init_engine()
-    logger.info("Database engine ready.")
+    print("LIFESPAN: after init_engine", flush=True, file=sys.stderr)
+    logger.info("Running database migrations...")
+    # run_migrations() is synchronous and can block for several seconds on a
+    # fresh DuckDB file.  Running it in the default thread-pool executor keeps
+    # the event loop responsive and prevents the async lifespan from deadlocking
+    # with DuckDB's internal threading.
+    loop = asyncio.get_event_loop()
+    print("LIFESPAN: before run_in_executor", flush=True, file=sys.stderr)
+    await loop.run_in_executor(None, run_migrations)
+    print("LIFESPAN: after run_in_executor", flush=True, file=sys.stderr)
+    logger.info("Database ready.")
+    print("LIFESPAN: yielding", flush=True, file=sys.stderr)
     yield
     logger.info("Shutting down database engine...")
     dispose_engine()
